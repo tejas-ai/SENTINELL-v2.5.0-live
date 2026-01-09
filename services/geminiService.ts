@@ -1,5 +1,5 @@
-import { GoogleGenAI, Schema, Type, Modality } from "@google/genai";
-import { AudioAnalysisResult, VisualAnalysisResult, TranscriptionResult, ScamRiskResult } from '../types';
+import { GoogleGenAI, Schema, Type, LiveServerMessage, Modality } from "@google/genai";
+import { AudioAnalysisResult, VisualAnalysisResult, ScamRiskResult, TranscriptionResult } from '../types';
 
 const getClient = () => {
   const apiKey = process.env.API_KEY;
@@ -131,110 +131,89 @@ export const analyzeSpectrogram = async (base64Image: string, mimeType: string):
   }
 };
 
-// --- Transcription Service (Using gemini-3-flash-preview) ---
+// --- Live API ---
 
-const TRANSCRIPTION_PROMPT = "Transcribe the following audio exactly as spoken. Identify the language if possible.";
-
-const transcriptionSchema: Schema = {
-  type: Type.OBJECT,
-  properties: {
-    transcript: { type: Type.STRING, description: "Full transcript of the audio" },
-    detected_language: { type: Type.STRING, description: "Language code (e.g., en-US)" },
-    summary: { type: Type.STRING, description: "Brief summary of the content" }
-  },
-  required: ["transcript"]
-};
-
-export const transcribeAudio = async (base64Audio: string, mimeType: string): Promise<TranscriptionResult> => {
+export const connectLiveSession = (callbacks: {
+  onopen?: () => void;
+  onmessage?: (message: LiveServerMessage) => void;
+  onclose?: (event: CloseEvent) => void;
+  onerror?: (event: ErrorEvent) => void;
+}) => {
   const client = getClient();
-
-  const response = await client.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: {
-      parts: [
-        {
-            inlineData: {
-                mimeType: mimeType,
-                data: base64Audio
-            }
-        },
-        { text: TRANSCRIPTION_PROMPT }
-      ]
-    },
+  return client.live.connect({
+    model: 'gemini-2.5-flash-native-audio-preview-12-2025',
+    callbacks: callbacks,
     config: {
-      responseMimeType: "application/json",
-      responseSchema: transcriptionSchema
-    }
+      responseModalities: [Modality.AUDIO],
+      speechConfig: {
+        voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
+      },
+      systemInstruction: 'You are Sentinell, an advanced AI security monitor observing a conversation for potential scams or social engineering.',
+      inputAudioTranscription: {}, 
+      outputAudioTranscription: {},
+    },
   });
-
-  if (!response.text) throw new Error("No response from AI");
-
-  try {
-    return JSON.parse(response.text) as TranscriptionResult;
-  } catch (e) {
-    return { transcript: response.text, detected_language: 'unknown', summary: 'Parsing failed' };
-  }
 };
 
-// --- Scam Risk Detection (Using gemini-2.5-flash-lite) ---
+// --- Scam Risk Check ---
 
-const SCAM_CHECK_PROMPT = `Analyze the following text for signs of a scam, social engineering, or fraud attempt.
-Focus on urgency, financial demands, threats, or requests for sensitive information.
-Rate the risk level and provide a warning if necessary.`;
-
-const scamRiskSchema: Schema = {
+const SCAM_RISK_SCHEMA: Schema = {
   type: Type.OBJECT,
   properties: {
+    risk_score: { type: Type.INTEGER, description: "0-100" },
     risk_level: { type: Type.STRING, enum: ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
-    risk_score: { type: Type.NUMBER, description: "0 to 100" },
-    detected_patterns: { type: Type.ARRAY, items: { type: Type.STRING } },
-    warning_message: { type: Type.STRING, description: "Short warning for the user" }
+    warning_message: { type: Type.STRING },
+    detected_patterns: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING }
+    }
   },
-  required: ["risk_level", "risk_score", "detected_patterns", "warning_message"]
+  required: ["risk_score", "risk_level", "warning_message", "detected_patterns"]
 };
 
 export const checkScamRisk = async (text: string): Promise<ScamRiskResult> => {
   const client = getClient();
-  
-  // Using gemini-2.5-flash-lite as requested for fast AI responses
   const response = await client.models.generateContent({
-    model: 'gemini-2.5-flash-lite', 
-    contents: {
-        parts: [{ text: `${SCAM_CHECK_PROMPT}\n\nTEXT:\n${text}` }]
-    },
+    model: 'gemini-3-flash-preview',
+    contents: `Analyze the following text for scam indicators, social engineering, or fraudulent patterns. Text: "${text}"`,
     config: {
-        responseMimeType: "application/json",
-        responseSchema: scamRiskSchema
+      responseMimeType: "application/json",
+      responseSchema: SCAM_RISK_SCHEMA
     }
   });
 
-  if (!response.text) throw new Error("No response from AI");
-
-  try {
-    return JSON.parse(response.text) as ScamRiskResult;
-  } catch (e) {
-    return { risk_level: "LOW", risk_score: 0, detected_patterns: [], warning_message: "Could not analyze" };
-  }
+  if (!response.text) throw new Error("No response");
+  return JSON.parse(response.text) as ScamRiskResult;
 };
 
-// --- Live API Connect ---
+// --- Transcription ---
 
-export const connectLiveSession = async (callbacks: any) => {
-    const client = getClient();
-    return await client.live.connect({
-        model: 'gemini-2.5-flash-native-audio-preview-12-2025',
-        callbacks,
-        config: {
-            responseModalities: [Modality.AUDIO],
-            speechConfig: {
-                voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
-            },
-            systemInstruction: `You are "Sentinell," a vigilant AI forensic assistant. 
-            You are listening to a live call to protect the user.
-            If you hear something suspicious, warn the user concisely.
-            Otherwise, acknowledge and analyze the audio quality for synthesis artifacts.`,
-            inputAudioTranscription: { model: "gemini-3-flash-preview" }, // Use model for transcription
-            outputAudioTranscription: { model: "gemini-3-flash-preview" }
-        }
-    });
-}
+const TRANSCRIPTION_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    transcript: { type: Type.STRING },
+    detected_language: { type: Type.STRING },
+    summary: { type: Type.STRING }
+  },
+  required: ["transcript", "detected_language", "summary"]
+};
+
+export const transcribeAudio = async (base64Audio: string, mimeType: string): Promise<TranscriptionResult> => {
+  const client = getClient();
+  const response = await client.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: {
+      parts: [
+        { inlineData: { mimeType, data: base64Audio } },
+        { text: "Transcribe this audio verbatim and provide a brief summary." }
+      ]
+    },
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: TRANSCRIPTION_SCHEMA
+    }
+  });
+
+  if (!response.text) throw new Error("No response");
+  return JSON.parse(response.text) as TranscriptionResult;
+};

@@ -1,8 +1,6 @@
 export enum AnalysisMode {
   AUDIO = 'AUDIO',
-  SPECTROGRAM = 'SPECTROGRAM',
-  LIVE_MONITOR = 'LIVE_MONITOR',
-  TRANSCRIBER = 'TRANSCRIBER'
+  SPECTROGRAM = 'SPECTROGRAM'
 }
 
 export interface AudioAnalysisResult {
@@ -19,20 +17,20 @@ export interface VisualAnalysisResult {
   visual_evidence: string;
 }
 
+export interface ScamRiskResult {
+  risk_score: number;
+  risk_level: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  warning_message: string;
+  detected_patterns: string[];
+}
+
 export interface TranscriptionResult {
   transcript: string;
-  detected_language?: string;
-  summary?: string;
+  detected_language: string;
+  summary: string;
 }
 
-export interface ScamRiskResult {
-  risk_level: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-  risk_score: number;
-  detected_patterns: string[];
-  warning_message: string;
-}
-
-export type AnalysisResult = AudioAnalysisResult | VisualAnalysisResult | TranscriptionResult;
+export type AnalysisResult = AudioAnalysisResult | VisualAnalysisResult;
 
 export interface FileData {
   file: File;

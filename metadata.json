@@ -1,7 +1,5 @@
 {
   "name": "Sentinell AI Forensics",
   "description": "A professional forensic tool for detecting deepfake audio using acoustic analysis and spectral visual inspection powered by Gemini.",
-  "requestFramePermissions": [
-    "microphone"
-  ]
+  "requestFramePermissions": []
 }

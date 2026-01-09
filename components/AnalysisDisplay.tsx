@@ -1,13 +1,15 @@
 import React from 'react';
 import { AnalysisResult, AudioAnalysisResult, VisualAnalysisResult, AnalysisMode } from '../types';
 import { IconCheckBadge, IconAlert } from '../constants';
+import AudioVisualizer from './AudioVisualizer';
 
 interface AnalysisDisplayProps {
   result: AnalysisResult;
   mode: AnalysisMode;
+  audioUrl?: string;
 }
 
-const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ result, mode }) => {
+const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ result, mode, audioUrl }) => {
   const isAudio = mode === AnalysisMode.AUDIO;
   
   // Type Guard Helpers
@@ -30,6 +32,11 @@ const AnalysisDisplay: React.FC<AnalysisDisplayProps> = ({ result, mode }) => {
     confidence = result.human_likelihood_score;
     details = (
       <div className="space-y-6">
+        {/* Visualizer Inserted Here */}
+        {audioUrl && (
+          <AudioVisualizer audioUrl={audioUrl} />
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-800">
                 <span className="text-xs uppercase tracking-widest text-slate-500 block mb-1">Human Likelihood</span>
