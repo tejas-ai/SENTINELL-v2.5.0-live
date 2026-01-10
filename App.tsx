@@ -3,7 +3,7 @@ import { APP_NAME, APP_VERSION } from './constants';
 import { AnalysisMode, FileData, AnalysisResult } from './types';
 import FileUpload from './components/FileUpload';
 import AnalysisDisplay from './components/AnalysisDisplay';
-import { analyzeAudio, analyzeSpectrogram } from './services/geminiService';
+import { analyzeAudio, analyzeImage } from './services/geminiService';
 
 const App: React.FC = () => {
   const [mode, setMode] = useState<AnalysisMode>(AnalysisMode.AUDIO);
@@ -34,7 +34,7 @@ const App: React.FC = () => {
       if (mode === AnalysisMode.AUDIO) {
         analysisResult = await analyzeAudio(data.base64, data.mimeType);
       } else {
-        analysisResult = await analyzeSpectrogram(data.base64, data.mimeType);
+        analysisResult = await analyzeImage(data.base64, data.mimeType);
       }
       setResult(analysisResult);
     } catch (err: any) {
@@ -50,7 +50,7 @@ const App: React.FC = () => {
       
       {/* Header */}
       <header className="border-b border-slate-800 bg-[#020617]/80 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-cyan-500 rounded-sm flex items-center justify-center text-black font-bold font-mono text-lg shadow-[0_0_15px_rgba(6,182,212,0.5)]">
               S
@@ -72,29 +72,29 @@ const App: React.FC = () => {
               Native Audio
             </button>
             <button
-              onClick={() => handleModeChange(AnalysisMode.SPECTROGRAM)}
+              onClick={() => handleModeChange(AnalysisMode.IMAGE)}
               className={`px-4 py-1.5 rounded text-sm font-medium transition-all ${
-                mode === AnalysisMode.SPECTROGRAM 
+                mode === AnalysisMode.IMAGE 
                   ? 'bg-slate-700 text-cyan-400 shadow-sm' 
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              Visual Forensics
+              Deepfake Image Detector
             </button>
           </nav>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-6 pt-12">
+      <main className="max-w-6xl mx-auto px-6 pt-12">
         {/* Intro Text */}
         <div className="text-center mb-12">
             <h2 className="text-2xl md:text-4xl font-bold text-white mb-4 tracking-tight">
-              {mode === AnalysisMode.AUDIO ? 'Deepfake Audio Detection' : 'Spectrogram Forensics'}
+              {mode === AnalysisMode.AUDIO ? 'Deepfake Audio Detection' : 'Forensic Image Analysis'}
             </h2>
             <p className="text-slate-400 max-w-2xl mx-auto text-lg leading-relaxed">
               {mode === AnalysisMode.AUDIO 
                 ? "Analyze audio files for microscopic artifacts, spectral inconsistencies, and unnatural prosody using Sentinell's psychoacoustic engine." 
-                : "Deploy computer vision to scan Mel-Spectrograms for GAN artifacts, checkerboard effects, and spectral discontinuities."}
+                : "Advanced forensic workstation for detecting GAN artifacts, diffusion patterns, and metadata inconsistencies in digital imagery."}
             </p>
         </div>
 
@@ -111,35 +111,37 @@ const App: React.FC = () => {
         {fileData && (
           <div className="space-y-8">
             
-            {/* File Preview Card */}
-            <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex items-center justify-between">
-              <div className="flex items-center gap-4 overflow-hidden">
-                <div className="w-12 h-12 bg-slate-800 rounded flex items-center justify-center text-slate-500 shrink-0">
-                   {mode === AnalysisMode.AUDIO ? (
-                     <span className="text-xs font-mono">MP3</span>
-                   ) : (
-                     <img src={fileData.previewUrl} alt="preview" className="w-full h-full object-cover rounded" />
-                   )}
+            {/* File Preview Card (Simplified during analysis or if Audio) */}
+            {(!result || mode === AnalysisMode.AUDIO) && (
+                <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex items-center justify-between max-w-3xl mx-auto">
+                <div className="flex items-center gap-4 overflow-hidden">
+                    <div className="w-12 h-12 bg-slate-800 rounded flex items-center justify-center text-slate-500 shrink-0">
+                    {mode === AnalysisMode.AUDIO ? (
+                        <span className="text-xs font-mono">MP3</span>
+                    ) : (
+                        <img src={fileData.previewUrl} alt="preview" className="w-full h-full object-cover rounded" />
+                    )}
+                    </div>
+                    <div className="min-w-0">
+                    <p className="text-sm font-medium text-white truncate">{fileData.fileName}</p>
+                    <p className="text-xs text-slate-500 font-mono">{fileData.fileSize}</p>
+                    </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-white truncate">{fileData.file.name}</p>
-                  <p className="text-xs text-slate-500 font-mono">{(fileData.file.size / 1024 / 1024).toFixed(2)} MB</p>
+                
+                {!isAnalyzing && (
+                    <button 
+                    onClick={resetAnalysis}
+                    className="px-3 py-1 text-xs font-medium text-red-400 hover:bg-red-950/30 rounded border border-transparent hover:border-red-900 transition-colors"
+                    >
+                    Remove
+                    </button>
+                )}
                 </div>
-              </div>
-              
-              {!isAnalyzing && (
-                 <button 
-                  onClick={resetAnalysis}
-                  className="px-3 py-1 text-xs font-medium text-red-400 hover:bg-red-950/30 rounded border border-transparent hover:border-red-900 transition-colors"
-                 >
-                   Remove
-                 </button>
-              )}
-            </div>
+            )}
 
             {/* Audio Player if Audio Mode (Pre-analysis or during analysis only) */}
             {mode === AnalysisMode.AUDIO && !isAnalyzing && !result && (
-              <audio controls className="w-full h-10 block rounded opacity-80" src={fileData.previewUrl} />
+              <audio controls className="w-full h-10 block rounded opacity-80 max-w-3xl mx-auto" src={fileData.previewUrl} />
             )}
 
             {/* Loading Animation */}
@@ -149,9 +151,9 @@ const App: React.FC = () => {
                   <div className="absolute top-0 left-0 h-full w-1/3 bg-cyan-500 blur-[4px] animate-[loading_1s_infinite_ease-in-out]"></div>
                 </div>
                 <div>
-                    <h3 className="text-xl font-bold text-white animate-pulse">Analyzing Physics...</h3>
+                    <h3 className="text-xl font-bold text-white animate-pulse">Running Forensic Suite...</h3>
                     <p className="text-slate-500 font-mono text-sm mt-2">
-                      {mode === AnalysisMode.AUDIO ? 'Detecting micro-tremors & phase glitches' : 'Scanning for GAN checkerboard patterns'}
+                      {mode === AnalysisMode.AUDIO ? 'Detecting micro-tremors & phase glitches' : 'Scanning for GAN/Diffusion signatures & Metadata integrity'}
                     </p>
                 </div>
               </div>
@@ -159,7 +161,7 @@ const App: React.FC = () => {
 
             {/* Error Message */}
             {error && (
-              <div className="p-6 bg-red-950/20 border border-red-900/50 rounded-lg text-center">
+              <div className="p-6 bg-red-950/20 border border-red-900/50 rounded-lg text-center max-w-3xl mx-auto">
                 <p className="text-red-400 font-medium">Analysis Error</p>
                 <p className="text-red-300/70 text-sm mt-1">{error}</p>
                 <button 
@@ -176,13 +178,15 @@ const App: React.FC = () => {
               <AnalysisDisplay 
                 result={result} 
                 mode={mode} 
-                audioUrl={mode === AnalysisMode.AUDIO ? fileData.previewUrl : undefined}
+                fileUrl={fileData.previewUrl}
+                fileName={fileData.fileName}
+                base64={fileData.base64} // Pass base64
               />
             )}
 
             {/* Reset / New Analysis Button (only if finished) */}
             {result && (
-              <div className="text-center pt-8">
+              <div className="text-center pt-8 pb-12">
                 <button
                   onClick={resetAnalysis}
                   className="px-8 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-lg shadow-lg shadow-cyan-900/20 transition-all hover:scale-105 active:scale-95"

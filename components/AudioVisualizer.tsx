@@ -1,16 +1,26 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 
 interface AudioVisualizerProps {
   audioUrl: string;
+  highlightTimestamp?: string; // e.g., "0:04" or "MM:SS"
 }
 
-const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ audioUrl }) => {
+const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ audioUrl, highlightTimestamp }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const animationRef = useRef<number>(0);
   const analyzerRef = useRef<AnalyserNode | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  
+  // Parse timestamp string to seconds
+  const highlightTime = useMemo(() => {
+    if (!highlightTimestamp || highlightTimestamp === "N/A") return null;
+    const parts = highlightTimestamp.split(':');
+    if (parts.length === 2) {
+      return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+    }
+    return null;
+  }, [highlightTimestamp]);
 
   useEffect(() => {
     // Cleanup on unmount
@@ -28,7 +38,6 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ audioUrl }) => {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     const audioCtx = new AudioContextClass();
     const analyzer = audioCtx.createAnalyser();
-    // 2048 fftSize gives a good balance for waveform resolution
     analyzer.fftSize = 2048;
 
     const source = audioCtx.createMediaElementSource(audioRef.current);
@@ -37,7 +46,6 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ audioUrl }) => {
 
     audioContextRef.current = audioCtx;
     analyzerRef.current = analyzer;
-    sourceRef.current = source;
   };
 
   const draw = () => {
@@ -55,6 +63,7 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ audioUrl }) => {
     canvasCtx.fillStyle = 'rgb(2, 6, 23)'; // slate-950
     canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
 
+    // Draw Waveform
     canvasCtx.lineWidth = 2;
     canvasCtx.strokeStyle = '#22d3ee'; // cyan-400
     canvasCtx.beginPath();
@@ -78,6 +87,32 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ audioUrl }) => {
     canvasCtx.lineTo(canvas.width, canvas.height / 2);
     canvasCtx.stroke();
 
+    // Draw Highlight Marker logic
+    // Note: Since this is a real-time visualizer of the *current* buffer, strictly mapping a specific absolute timestamp 
+    // to a static position on a moving window is complex without pre-decoding the whole file. 
+    // Instead, we will overlay an indicator when the current playback time is near the artifact timestamp.
+    
+    if (audioRef.current && highlightTime !== null) {
+        const currentTime = audioRef.current.currentTime;
+        const timeDiff = Math.abs(currentTime - highlightTime);
+        
+        // If we are within 1 second of the artifact, flash the screen/canvas border
+        if (timeDiff < 1.0) {
+             // Visual Alert Overlay
+             canvasCtx.fillStyle = `rgba(249, 115, 22, ${1.0 - timeDiff})`; // Orange fade
+             canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+             
+             // Text indicator
+             canvasCtx.fillStyle = '#ffffff';
+             canvasCtx.font = '12px "JetBrains Mono"';
+             canvasCtx.fillText(`ARTIFACT DETECTED @ ${highlightTimestamp}`, 10, 20);
+             
+             canvasCtx.strokeStyle = '#f97316'; // orange-500
+             canvasCtx.lineWidth = 4;
+             canvasCtx.strokeRect(0, 0, canvas.width, canvas.height);
+        }
+    }
+
     animationRef.current = requestAnimationFrame(draw);
   };
 
@@ -89,6 +124,14 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ audioUrl }) => {
     draw();
   };
 
+  // Seek to timestamp helper
+  const seekToArtifact = () => {
+      if(audioRef.current && highlightTime !== null) {
+          audioRef.current.currentTime = highlightTime;
+          audioRef.current.play();
+      }
+  }
+
   return (
     <div className="w-full bg-slate-900/50 rounded-xl p-4 border border-slate-800 shadow-lg mb-6">
       <div className="flex flex-col gap-4">
@@ -97,13 +140,26 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ audioUrl }) => {
              <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
              Real-time Signal Analysis
            </span>
+           
+           {highlightTime !== null && (
+               <button 
+                onClick={seekToArtifact}
+                className="text-xs font-mono bg-orange-900/30 text-orange-400 border border-orange-900/50 px-2 py-1 rounded hover:bg-orange-900/50 transition-colors"
+               >
+                   Jump to Artifact ({highlightTimestamp})
+               </button>
+           )}
         </div>
-        <canvas
-          ref={canvasRef}
-          className="w-full h-32 rounded-lg bg-slate-950 border border-slate-800/50 shadow-inner"
-          width={800}
-          height={128}
-        />
+        
+        <div className="relative">
+            <canvas
+            ref={canvasRef}
+            className="w-full h-32 rounded-lg bg-slate-950 border border-slate-800/50 shadow-inner"
+            width={800}
+            height={128}
+            />
+        </div>
+
         <audio
           ref={audioRef}
           src={audioUrl}
